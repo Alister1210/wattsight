@@ -78,8 +78,7 @@ Wattsight is open-source under the **MIT License**.
 ---
 
 ## 👨‍💻 Contributors
-🔹 **Your Name** - [GitHub](https://github.com/Alister1210)  
-🔹 **Other Contributors**  
+🔹 **Alister Fernandes** - [GitHub](https://github.com/Alister1210)  
 
 ---
 
