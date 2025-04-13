@@ -511,37 +511,96 @@ export const getDashboardStats = async (selectedStateId?: string) => {
   }
 };
 
-// Get data for a specific state
-// export const getStateData = async (stateName: string) => {
-//   try {
-//     // First get the state ID
-//     const { data: stateData, error: stateError } = await supabase
-//       .from("states")
-//       .select("id")
-//       .eq("name", stateName)
-//       .single();
+// Get holiday vs non-holiday consumption comparison for a specific state
+export const getHolidayComparisonData = async (stateId?: string) => {
+  try {
+    // Get all holidays
+    const { data: holidayData, error: holidayError } = await supabase
+      .from("holidays")
+      .select("date, is_holiday")
+      .eq("is_holiday", true);
 
-//     if (stateError) throw stateError;
+    if (holidayError) throw holidayError;
 
-//     const stateId = stateData?.id;
+    // Create a set of holiday dates for faster lookup
+    const holidayDates = new Set(
+      holidayData?.map((holiday) => holiday.date) || []
+    );
 
-//     if (!stateId) {
-//       throw new Error(`State ${stateName} not found`);
-//     }
+    // Get forecast data
+    let forecastQuery = supabase
+      .from("forecasts")
+      .select(
+        `
+        date,
+        predicted_consumption,
+        state_id,
+        state:state_id (
+          name
+        )
+      `
+      )
+      .order("date", { ascending: true });
 
-//     // Now fetch data with the state ID
-//     const consumptionData = await getStateConsumption(stateId);
-//     const modelData = await getModelPerformanceData(stateId);
-//     const dashboardStats = await getDashboardStats(stateId);
+    if (stateId) {
+      forecastQuery = forecastQuery.eq("state_id", stateId);
+    }
 
-//     return {
-//       stateId,
-//       consumptionData: consumptionData.find((item) => item.stateId === stateId),
-//       modelPerformance: modelData,
-//       stats: dashboardStats,
-//     };
-//   } catch (error) {
-//     console.error(`Error fetching data for state ${stateName}:`, error);
-//     throw error;
-//   }
-// };
+    const { data: forecastData, error: forecastError } = await forecastQuery;
+
+    if (forecastError) throw forecastError;
+
+    // Group forecast data by whether the date is a holiday
+    let holidayConsumption = 0;
+    let holidayCount = 0;
+    let nonHolidayConsumption = 0;
+    let nonHolidayCount = 0;
+
+    forecastData?.forEach((forecast) => {
+      if (holidayDates.has(forecast.date)) {
+        holidayConsumption += forecast.predicted_consumption || 0;
+        holidayCount++;
+      } else {
+        nonHolidayConsumption += forecast.predicted_consumption || 0;
+        nonHolidayCount++;
+      }
+    });
+
+    return [
+      {
+        name: "Holiday",
+        consumption:
+          holidayCount > 0 ? Math.round(holidayConsumption / holidayCount) : 0,
+        count: holidayCount,
+      },
+      {
+        name: "Normal Day",
+        consumption:
+          nonHolidayCount > 0
+            ? Math.round(nonHolidayConsumption / nonHolidayCount)
+            : 0,
+        count: nonHolidayCount,
+      },
+    ];
+  } catch (error) {
+    console.error("Error fetching holiday comparison data:", error);
+    throw error;
+  }
+};
+
+export const getStatesWithPopulation = async () => {
+  try {
+    const { data, error } = await supabase
+      .from("states")
+      .select("id, name, region, population")
+      .order("name", { ascending: true });
+
+    if (error) throw error;
+
+    return data || [];
+  } catch (error) {
+    console.error("Error fetching states with population data:", error);
+    throw error;
+  }
+};
+

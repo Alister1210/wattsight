@@ -19,58 +19,21 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile";
 
 interface HolidayComparisonChartProps {
-  forecastData: any[];
-  holidayData: any[];
+  data: Array<{
+    name: string;
+    consumption: number;
+    count: number;
+  }>;
   title: string;
   description?: string;
 }
 
 export function HolidayComparisonChart({
-  forecastData,
-  holidayData,
+  data,
   title,
   description,
 }: HolidayComparisonChartProps) {
   const isMobile = useIsMobile();
-
-  // Process data to compare holiday vs non-holiday consumption
-  const processData = () => {
-    // Create a set of holiday dates for faster lookup
-    const holidayDates = new Set(
-      holidayData.filter((h) => h.is_holiday).map((h) => h.date)
-    );
-
-    // Group forecast data by whether the date is a holiday
-    let holidayConsumption = 0;
-    let holidayCount = 0;
-    let nonHolidayConsumption = 0;
-    let nonHolidayCount = 0;
-
-    forecastData.forEach((forecast) => {
-      if (holidayDates.has(forecast.date)) {
-        holidayConsumption += forecast.predicted_consumption || 0;
-        holidayCount++;
-      } else {
-        nonHolidayConsumption += forecast.predicted_consumption || 0;
-        nonHolidayCount++;
-      }
-    });
-
-    return [
-      {
-        name: "Holiday",
-        consumption:
-          holidayCount > 0 ? Math.round(holidayConsumption / holidayCount) : 0,
-      },
-      {
-        name: "Normal Day",
-        consumption:
-          nonHolidayCount > 0
-            ? Math.round(nonHolidayConsumption / nonHolidayCount)
-            : 0,
-      },
-    ];
-  };
 
   const CustomTooltip = ({
     active,
@@ -78,11 +41,15 @@ export function HolidayComparisonChart({
     label,
   }: TooltipProps<number, string>) => {
     if (active && payload && payload.length) {
+      const data = payload[0].payload;
       return (
         <div className="bg-background p-3 border rounded-md shadow-md">
           <p className="font-medium">{label}</p>
           <p className="text-sm" style={{ color: payload[0].color }}>
-            Average Consumption: {payload[0].value?.toLocaleString()} MWh
+            Average Consumption: {payload[0].value?.toLocaleString()} KWh
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Based on {data.count} days
           </p>
         </div>
       );
@@ -100,7 +67,7 @@ export function HolidayComparisonChart({
         <div className="h-[400px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
-              data={processData()}
+              data={data}
               margin={{
                 top: 20,
                 right: 20,
@@ -123,7 +90,7 @@ export function HolidayComparisonChart({
               <Legend />
               <Bar
                 dataKey="consumption"
-                name="Avg. Consumption (MWh)"
+                name="Avg. Consumption (KWh)"
                 fill="#0ea5e9"
                 radius={[4, 4, 0, 0]}
               />

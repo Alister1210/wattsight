@@ -4,8 +4,8 @@ import { StatsCard } from "@/components/dashboard/StatsCard";
 import { ConsumptionChart } from "@/components/dashboard/ConsumptionChart";
 import { TemperatureConsumptionChart } from "@/components/dashboard/TemperatureConsumptionChart";
 import { RegionalBarChart } from "@/components/dashboard/RegionalBarChart";
-import { HourlyConsumptionChart } from "@/components/dashboard/HourlyConsumptionChart";
-import { ModelPerformanceTable } from "@/components/dashboard/ModelPerformanceTable";
+// import { HourlyConsumptionChart } from "@/components/dashboard/HourlyConsumptionChart";
+// import { ModelPerformanceTable } from "@/components/dashboard/ModelPerformanceTable";
 import {
   Select,
   SelectContent,
@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getHolidayComparisonData } from "@/lib/real-data";
 import {
   Zap,
   LineChart,
@@ -58,11 +59,82 @@ const DashboardPage = () => {
   const [combinedWeatherForecastData, setCombinedWeatherForecastData] =
     useState<any[]>([]);
 
+  const [holidayComparisonData, setHolidayComparisonData] = useState<any[]>([]);
+
   // Get selected state's ID
   const getSelectedStateId = (stateName: string) => {
     const state = states.find((s) => s.name === stateName);
     return state?.id;
   };
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+
+        // Fetch all data in parallel
+        const [
+          statesList,
+          statesConsumption,
+          regionalConsumption,
+          weatherImpact,
+          modelMetrics,
+          dashboardStatsData,
+          // Add the holiday comparison data fetch
+          holidayComparison,
+        ] = await Promise.all([
+          getStates(),
+          getStateConsumption(),
+          getRegionalConsumption(),
+          getWeatherImpactData(),
+          getModelPerformanceData(),
+          getDashboardStats(),
+          // Fetch holiday comparison data without state filter initially
+          getHolidayComparisonData(),
+        ]);
+
+        // Add this with the other state setters
+        if (holidayComparison) setHolidayComparisonData(holidayComparison);
+
+        // Rest of the existing code...
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [stateParam]);
+
+  // Add this to the useEffect that updates when selected state changes
+  useEffect(() => {
+    const updateStateData = async () => {
+      try {
+        const selectedStateId = getSelectedStateId(selectedState);
+        if (!selectedStateId) return;
+
+        const [newStats, newModelData, newHolidayComparisonData] =
+          await Promise.all([
+            getDashboardStats(selectedStateId),
+            getModelPerformanceData(selectedStateId),
+            getHolidayComparisonData(selectedStateId),
+          ]);
+
+        setDashboardStats(newStats);
+        setModelPerformanceData(newModelData);
+        setHolidayComparisonData(newHolidayComparisonData);
+
+        // Rest of the existing code...
+      } catch (error) {
+        console.error("Error updating state data:", error);
+      }
+    };
+
+    if (states.length > 0 && forecastData.length > 0) {
+      updateStateData();
+    }
+  }, [selectedState, states, forecastData]);
 
   // Set initial state from URL parameter once states are loaded
   useEffect(() => {
@@ -333,7 +405,7 @@ const DashboardPage = () => {
             <TabsTrigger value="forecast">Forecast Analysis</TabsTrigger>
             <TabsTrigger value="weather">Weather Impact</TabsTrigger>
             <TabsTrigger value="state">{selectedState}</TabsTrigger>
-            <TabsTrigger value="models">Model Performance</TabsTrigger>
+            {/* <TabsTrigger value="models">Model Performance</TabsTrigger> */}
           </TabsList>
 
           {/* Overview Tab */}
@@ -361,10 +433,9 @@ const DashboardPage = () => {
                 description="Predicted energy usage over time with confidence intervals"
               />
               <HolidayComparisonChart
-                forecastData={forecastData}
-                holidayData={holidayData}
+                data={holidayComparisonData}
                 title="Holiday vs. Normal Day Consumption"
-                description="Comparison of average energy usage on holidays versus normal days"
+                description={`Average energy consumption comparison for ${selectedState}`}
               />
             </div>
           </TabsContent>
@@ -413,13 +484,13 @@ const DashboardPage = () => {
           </TabsContent>
 
           {/* Models Tab */}
-          <TabsContent value="models">
+          {/* <TabsContent value="models">
             <ModelPerformanceTable
               data={modelPerformanceData}
               title="Forecasting Model Performance"
               description="Accuracy metrics of different prediction models"
             />
-          </TabsContent>
+          </TabsContent> */}
         </Tabs>
       </div>
     </Layout>

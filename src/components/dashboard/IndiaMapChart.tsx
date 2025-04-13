@@ -8,6 +8,8 @@ import {
 } from "@/components/ui/card";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { MapPin } from "lucide-react";
+import { getStatesWithPopulation } from "@/lib/real-data";
+import { toast } from "@/components/ui/use-toast";
 
 interface IndiaMapChartProps {
   stateData: any[];
@@ -25,8 +27,32 @@ export function IndiaMapChart({
   const [hoveredState, setHoveredState] = useState<string | null>(null);
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [mapDimensions, setMapDimensions] = useState({ width: 0, height: 0 });
+  const [statesWithPopulation, setStatesWithPopulation] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
+
+  // Fetch states with population data
+  useEffect(() => {
+    const fetchStatesWithPopulation = async () => {
+      setIsLoading(true);
+      try {
+        const data = await getStatesWithPopulation();
+        setStatesWithPopulation(data);
+      } catch (error) {
+        console.error("Failed to fetch states with population:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load population data",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchStatesWithPopulation();
+  }, []);
 
   // Calculate state-wise consumption
   const getStateConsumption = () => {
@@ -48,13 +74,13 @@ export function IndiaMapChart({
     return consumptionMap;
   };
 
-  // Get consumption level color - Enhanced color palette for better visibility
+  // Get consumption level color - Enhanced color palette for better visibility in light mode
   const getConsumptionColor = (
     stateName: string,
     consumptionData: Record<string, number>,
     isDarkMode: boolean
   ) => {
-    if (!consumptionData[stateName]) return isDarkMode ? "#374151" : "#e5e7eb"; // Default gray
+    if (!consumptionData[stateName]) return isDarkMode ? "#374151" : "#d1d5db"; // Lighter gray for light mode
 
     const consumption = consumptionData[stateName];
     const allValues = Object.values(consumptionData).filter((v) => v > 0);
@@ -68,11 +94,11 @@ export function IndiaMapChart({
       if (intensity < 0.8) return "#3b82f6"; // Darker blue
       return "#2563eb"; // Darkest blue
     } else {
-      // Light mode blues
-      if (intensity < 0.3) return "#dbeafe"; // Very light blue
-      if (intensity < 0.6) return "#93c5fd"; // Light blue
-      if (intensity < 0.8) return "#60a5fa"; // Medium blue
-      return "#3b82f6"; // Dark blue
+      // Light mode blues - Higher contrast colors for better visibility
+      if (intensity < 0.3) return "#bfdbfe"; // Very light blue
+      if (intensity < 0.6) return "#60a5fa"; // Medium blue
+      if (intensity < 0.8) return "#3b82f6"; // Darker blue
+      return "#1d4ed8"; // Very dark blue for highest contrast
     }
   };
 
@@ -161,6 +187,23 @@ export function IndiaMapChart({
 
   // Get state details for tooltip
   const getStateDetails = (stateName: string) => {
+    // First try to find the state in the statesWithPopulation array
+    const stateWithPop = statesWithPopulation.find((s) => s.name === stateName);
+
+    // If found, use that data
+    if (stateWithPop) {
+      const consumption = consumptionData[stateName] || 0;
+      return {
+        name: stateName,
+        consumption,
+        region: stateWithPop.region || "Unknown",
+        population: stateWithPop.population
+          ? stateWithPop.population.toLocaleString()
+          : "Unknown",
+      };
+    }
+
+    // Fallback to the original stateData if statesWithPopulation doesn't have it
     const state = stateData.find((s) => s.name === stateName);
     if (!state) return null;
     const consumption = consumptionData[stateName] || 0;
@@ -188,14 +231,14 @@ export function IndiaMapChart({
       <CardContent>
         <div
           ref={mapContainerRef}
-          className="relative flex items-center justify-center h-[900px] md:h-[900px] overflow-hidden bg-gray-50 dark:bg-gray-900 rounded-lg"
+          className="relative flex items-center justify-center h-[900px] md:h-[900px] overflow-hidden bg-gray-100 dark:bg-gray-900 rounded-lg"
         >
           {/* India Map SVG with proper positioning and coloring */}
           <div className="relative w-[90%] h-[90%] flex items-center justify-center">
             <img
               src="/india.svg"
               alt="India Map"
-              className="w-full h-full object-contain max-w-full max-h-full drop-shadow-sm opacity-75 dark:opacity-60 dark:invert-[15%] dark:hue-rotate-180 transition-all duration-300"
+              className="w-full h-full object-contain max-w-full max-h-full drop-shadow-sm opacity-50 dark:opacity-60 dark:invert-[15%] dark:hue-rotate-180 transition-all duration-300"
             />
 
             {/* State circles with data binding */}
@@ -213,7 +256,7 @@ export function IndiaMapChart({
               const isHovered = hoveredState === state.name;
               const scale = coords.scale || 1;
               const size =
-                Math.max(14 * scale, 8) * (consumption > 0 ? 1 : 0.6);
+                Math.max(16 * scale, 10) * (consumption > 0 ? 1 : 0.6); // Increased base size
 
               return (
                 <div
@@ -232,7 +275,7 @@ export function IndiaMapChart({
                   onClick={() => handleStateClick(state.name)}
                 >
                   <div
-                    className="rounded-full transition-all duration-200 shadow-sm"
+                    className="rounded-full transition-all duration-200 shadow-md" // Better shadow
                     style={{
                       width: size,
                       height: size,
@@ -240,16 +283,18 @@ export function IndiaMapChart({
                       border: isSelected
                         ? "2px solid #000"
                         : isHovered
-                        ? `2px solid ${isDarkMode ? "#fff" : "#333"}`
-                        : "none",
-                      opacity: isHovered || isSelected ? 1 : 0.9,
+                        ? `2px solid ${isDarkMode ? "#fff" : "#000"}`
+                        : isDarkMode
+                        ? "none"
+                        : "1px solid rgba(0,0,0,0.2)", // Add light border in light mode for better visibility
+                      opacity: isHovered || isSelected ? 1 : 0.95, // Slightly higher base opacity
                     }}
                   />
                 </div>
               );
             })}
 
-            {/* State labels - FIXED: Text color in light mode changed to black for better visibility */}
+            {/* State labels with improved visibility */}
             {stateData.map((state) => {
               const coords = stateCoordinates[state.name];
               if (!coords) return null;
@@ -279,19 +324,25 @@ export function IndiaMapChart({
                     }}
                   >
                     <span
-                      className={`text-[9px] md:text-xs bg-white/90 dark:bg-gray-900/90 px-1 py-0.5 rounded ${
+                      className={`text-[9px] md:text-xs ${
+                        isDarkMode
+                          ? "bg-gray-900/90"
+                          : "bg-white/95 shadow-sm border border-gray-200" // Added border and shadow for better contrast
+                      } px-1.5 py-0.5 rounded-md ${
                         isSelected || isHovered ? "font-medium" : ""
                       }`}
                       style={{
                         color: isDarkMode
                           ? isSelected || isHovered
                             ? "#fff" // White text when selected/hovered in dark mode
-                            : "rgba(255,255,255,0.8)" // Improved visibility in dark mode
-                          : "#000", // Always black text in light mode for better visibility
+                            : "rgba(255,255,255,0.9)" // Improved visibility in dark mode
+                          : isSelected || isHovered
+                          ? "#000" // Black text when selected/hovered in light mode
+                          : "rgba(0,0,0,0.9)", // Dark text in light mode for better visibility
                         fontWeight: isSelected || isHovered ? 600 : 500, // Add more weight to text
                         textShadow: isDarkMode
                           ? "none"
-                          : "0px 0px 1px rgba(0,0,0,0.1)",
+                          : "0px 0px 1px rgba(255,255,255,0.8)", // White text shadow in light mode
                       }}
                     >
                       {displayText}
@@ -301,7 +352,7 @@ export function IndiaMapChart({
               );
             })}
 
-            {/* State details tooltip */}
+            {/* State details tooltip with improved visibility */}
             {hoveredState && (
               <div
                 className="absolute p-3 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 z-20 w-56 transition-all"
@@ -331,8 +382,8 @@ export function IndiaMapChart({
               </div>
             )}
 
-            {/* Legend - Improved and responsive */}
-            <div className="absolute bottom-4 left-4 p-3 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-md shadow-sm border border-gray-100 dark:border-gray-700 z-10">
+            {/* Legend - Improved with better contrast for light mode */}
+            <div className="absolute bottom-4 left-4 p-3 bg-white dark:bg-gray-800 backdrop-blur-sm rounded-md shadow-md border border-gray-200 dark:border-gray-700 z-10">
               <p className="text-xs font-medium mb-2">Consumption Level</p>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                 {isDarkMode
@@ -340,7 +391,7 @@ export function IndiaMapChart({
                       (color, i) => (
                         <div key={color} className="flex items-center gap-1.5">
                           <div
-                            className="w-3 h-3 rounded-full shadow-sm"
+                            className="w-3 h-3 rounded-full shadow-sm border border-gray-700"
                             style={{ backgroundColor: color }}
                           ></div>
                           <span className="text-xs whitespace-nowrap">
@@ -355,14 +406,14 @@ export function IndiaMapChart({
                         </div>
                       )
                     )
-                  : ["#dbeafe", "#93c5fd", "#60a5fa", "#3b82f6"].map(
+                  : ["#bfdbfe", "#60a5fa", "#3b82f6", "#1d4ed8"].map(
                       (color, i) => (
                         <div key={color} className="flex items-center gap-1.5">
                           <div
-                            className="w-3 h-3 rounded-full shadow-sm"
+                            className="w-3 h-3 rounded-full shadow-sm border border-gray-300"
                             style={{ backgroundColor: color }}
                           ></div>
-                          <span className="text-xs whitespace-nowrap">
+                          <span className="text-xs whitespace-nowrap font-medium">
                             {i === 0
                               ? "Low"
                               : i === 1
