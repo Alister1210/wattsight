@@ -257,9 +257,12 @@ export const getWeatherImpactData = async () => {
       .from("weather_data")
       .select(
         `
-        temperature,
         date,
-        state_id
+        state_id,
+        temperature,
+        humidity,
+        wind_speed,
+        rainfall
       `
       )
       .gte("date", thirtyDaysAgo)
@@ -295,13 +298,33 @@ export const getWeatherImpactData = async () => {
           date,
           temperatureSum: 0,
           temperatureCount: 0,
+          humiditySum: 0,
+          humidityCount: 0,
+          windSpeedSum: 0,
+          windSpeedCount: 0,
+          rainfallSum: 0,
+          rainfallCount: 0,
           consumption: 0,
         });
       }
 
       const dateData = dateMap.get(date);
-      dateData.temperatureSum += weather.temperature || 0;
-      dateData.temperatureCount += 1;
+      if (weather.temperature != null) {
+        dateData.temperatureSum += weather.temperature;
+        dateData.temperatureCount += 1;
+      }
+      if (weather.humidity != null) {
+        dateData.humiditySum += weather.humidity;
+        dateData.humidityCount += 1;
+      }
+      if (weather.wind_speed != null) {
+        dateData.windSpeedSum += weather.wind_speed;
+        dateData.windSpeedCount += 1;
+      }
+      if (weather.rainfall != null) {
+        dateData.rainfallSum += weather.rainfall;
+        dateData.rainfallCount += 1;
+      }
     });
 
     // Process consumption data
@@ -316,15 +339,40 @@ export const getWeatherImpactData = async () => {
 
     // Calculate final averages and make sure we have valid numbers
     const result = Array.from(dateMap.values())
-      .map(({ date, temperatureSum, temperatureCount, consumption }) => ({
-        date,
-        temperature:
-          temperatureCount > 0
-            ? Math.round((temperatureSum / temperatureCount) * 10) / 10
-            : 0,
-        consumption: Math.round(consumption) || 0,
-      }))
-      .filter((item) => item.temperature > 0 && item.consumption > 0) // Only include entries with valid data
+      .map(
+        ({
+          date,
+          temperatureSum,
+          temperatureCount,
+          humiditySum,
+          humidityCount,
+          windSpeedSum,
+          windSpeedCount,
+          rainfallSum,
+          rainfallCount,
+          consumption,
+        }) => ({
+          date,
+          temperature:
+            temperatureCount > 0
+              ? Math.round((temperatureSum / temperatureCount) * 10) / 10
+              : 0,
+          humidity:
+            humidityCount > 0
+              ? Math.round((humiditySum / humidityCount) * 10) / 10
+              : 0,
+          wind_speed:
+            windSpeedCount > 0
+              ? Math.round((windSpeedSum / windSpeedCount) * 10) / 10
+              : 0,
+          rainfall:
+            rainfallCount > 0
+              ? Math.round((rainfallSum / rainfallCount) * 10) / 10
+              : 0,
+          consumption: Math.round(consumption) || 0,
+        })
+      )
+      .filter((item) => item.consumption > 0) // Only include entries with consumption data
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     return result;
