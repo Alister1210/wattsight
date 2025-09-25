@@ -85,7 +85,7 @@ const StatesPage = () => {
   });
 
   // Get the regions in a specific order
-  const regions = ["North", "South", "East", "West"];
+  const regions = ["North", "Northeast", "South", "East", "West"];
 
   if (loading) {
     return (

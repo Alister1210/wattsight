@@ -38,11 +38,13 @@ import {
   getStates,
   getForecastConsumption,
   getDashboardStats,
+  getFutureForecasts,
 } from "@/lib/real-data";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { IndiaMapChart } from "@/components/dashboard/IndiaMapChart";
 import { ForecastConsumptionChart } from "@/components/dashboard/ForecastConsumptionChart";
+import { FutureForecastChart } from "@/components/dashboard/FutureForecastChart";
 import { HolidayComparisonChart } from "@/components/dashboard/HolidayComparisonChart";
 import { WeatherImpactChart } from "@/components/dashboard/WeatherImpactChart";
 import type { ForecastDataPoint } from "@/lib/real-data";
@@ -65,6 +67,7 @@ const DashboardPage = () => {
   const [holidayData, setHolidayData] = useState<any[]>([]);
   const [combinedWeatherForecastData, setCombinedWeatherForecastData] =
     useState<any[]>([]);
+  const [futureForecastData, setFutureForecastData] = useState<any[]>([]);
 
   const [holidayComparisonData, setHolidayComparisonData] = useState<any[]>([]);
 
@@ -87,17 +90,41 @@ const DashboardPage = () => {
           newModelData,
           newHolidayComparisonData,
           newForecastData,
+          newWeatherImpact,
+          newFutureForecasts,
         ] = await Promise.all([
           getDashboardStats(selectedStateId),
           getModelPerformanceData(selectedStateId),
           getHolidayComparisonData(selectedStateId),
           getForecastConsumption(selectedStateId),
+          getWeatherImpactData(selectedStateId),
+          getFutureForecasts(selectedStateId),
         ]);
 
         setDashboardStats(newStats);
         setModelPerformanceData(newModelData);
         setHolidayComparisonData(newHolidayComparisonData);
         setForecastData(newForecastData);
+        setWeatherData(newWeatherImpact);
+        setFutureForecastData(
+          newFutureForecasts.map((d) => ({
+            date: d.forecast_date,
+            consumption: d.predicted_consumption,
+          }))
+        );
+
+        // Combine weather and forecast data for weather impact charts
+        const combined = newWeatherImpact.map((weather) => {
+          const matchingForecast = newForecastData.find(
+            (f) => f.date === weather.date
+          );
+          return {
+            ...weather,
+            predicted_consumption:
+              matchingForecast?.predicted_consumption || weather.consumption,
+          };
+        });
+        setCombinedWeatherForecastData(combined);
 
         // Rest of the existing code...
       } catch (error) {
@@ -136,19 +163,19 @@ const DashboardPage = () => {
           statesList,
           statesConsumption,
           regionalConsumption,
-          weatherImpact,
+          // weatherImpact, // This will now be fetched in the state-specific useEffect
         ] = await Promise.all([
           getStates(),
           getStateConsumption(),
           getRegionalConsumption(),
-          getWeatherImpactData(),
+          // getWeatherImpactData(), // Moved to state-specific fetch
         ]);
 
         // Add proper null checks before setting state
         if (statesList) setStates(statesList);
         if (statesConsumption) setStateData(statesConsumption);
         if (regionalConsumption) setRegionalData(regionalConsumption);
-        if (weatherImpact) setWeatherData(weatherImpact);
+        // if (weatherImpact) setWeatherData(weatherImpact);
 
         // Set the selected state based on URL parameter if it exists
         if (stateParam && statesList.some((s) => s.name === stateParam)) {
@@ -165,26 +192,10 @@ const DashboardPage = () => {
 
         if (holidayError) throw holidayError;
         setHolidayData(holidaysData || []);
-
-        // Combine weather and forecast data for weather impact charts
-        if (weatherImpact && forecastData) {
-          const combined = weatherImpact.map((weather) => {
-            const matchingForecast = forecastData.find(
-              (f) => f.date === weather.date
-            );
-            return {
-              ...weather,
-              predicted_consumption:
-                matchingForecast?.predicted_consumption || weather.consumption,
-            };
-          });
-          setCombinedWeatherForecastData(combined);
-        }
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
         // Consider showing an error state to the user here
       }
-      // setLoading(false) is handled by the state-specific useEffect
     };
 
     fetchData();
@@ -461,10 +472,15 @@ const DashboardPage = () => {
           {/* Forecast Analysis Tab */}
           <TabsContent value="forecast" className="space-y-6">
             <div className="grid grid-cols-1 gap-6">
-              <ForecastConsumptionChart
+              {/* <ForecastConsumptionChart
                 data={forecastData}
                 title="Electricity Consumption Forecast"
                 description="Predicted energy usage over time with confidence intervals"
+              /> */}
+              <FutureForecastChart
+                data={futureForecastData}
+                title="7-Day Consumption Forecast"
+                description={`Predicted energy usage for the next 7 days in ${selectedState}`}
               />
               <HolidayComparisonChart
                 data={holidayComparisonData}

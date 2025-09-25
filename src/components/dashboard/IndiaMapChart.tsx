@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   Card,
   CardContent,
@@ -54,23 +54,71 @@ export function IndiaMapChart({
     fetchStatesWithPopulation();
   }, []);
 
-  // Calculate state-wise consumption
-  const getStateConsumption = () => {
+  // Calculate today's or latest consumption for each state (robust)
+  // - Matches dates in local YYYY-MM-DD (handles ISO with timezones)
+  // - Falls back to the most recent timestamped forecast or last-added entry
+  const getStateConsumption = (targetDate?: string) => {
     const consumptionMap: Record<string, number> = {};
+    // Use local YYYY-MM-DD so we avoid UTC/local timezone mismatches
+    const today = targetDate || new Date().toLocaleDateString("en-CA"); // "en-CA" -> YYYY-MM-DD
+
+    const normalize = (d?: string | Date) =>
+      d ? new Date(d).toLocaleDateString("en-CA") : ""; // normalize forecast dates to YYYY-MM-DD in local timezone
+
     stateData.forEach((state) => {
-      const stateForecasts = forecastData.filter(
-        (f) => f.state_id === state.id
+      // Keep original index so we can prefer later entries if timestamps tie or are invalid
+      const stateForecasts = forecastData
+        .map((f: any, idx: number) => ({ ...f, __originalIndex: idx }))
+        .filter(
+          (f: any) =>
+            String(f.state_id) === String(state.id) && // robust id comparison
+            f.predicted_consumption != null // ignore null/undefined consumption
+        );
+
+      if (stateForecasts.length === 0) {
+        consumptionMap[state.name] = 0;
+        return;
+      }
+
+      // 1) Try to find exact match for the target date (normalized)
+      const todayForecast = stateForecasts.find(
+        (f: any) => normalize(f.date) === today
       );
-      const totalConsumption = stateForecasts.reduce(
-        (sum, f) => sum + (f.predicted_consumption || 0),
-        0
-      );
-      const avgConsumption =
-        stateForecasts.length > 0
-          ? Math.round(totalConsumption / stateForecasts.length)
-          : 0;
-      consumptionMap[state.name] = avgConsumption;
+      if (todayForecast) {
+        consumptionMap[state.name] =
+          Number(todayForecast.predicted_consumption) || 0;
+        return;
+      }
+
+      // 2) Fallback: pick forecast with the latest timestamp (or last-added if date invalid)
+      let latest = stateForecasts[0];
+      let latestTs = Number(new Date(latest.date).getTime());
+
+      for (const f of stateForecasts) {
+        const ts = Number(new Date(f.date).getTime());
+        if (Number.isFinite(ts)) {
+          if (
+            !Number.isFinite(latestTs) ||
+            ts > latestTs ||
+            (ts === latestTs && f.__originalIndex > latest.__originalIndex)
+          ) {
+            latest = f;
+            latestTs = ts;
+          }
+        } else {
+          // invalid date -> prefer items later in array (assumed last-added)
+          if (
+            !Number.isFinite(latestTs) &&
+            f.__originalIndex > latest.__originalIndex
+          ) {
+            latest = f;
+          }
+        }
+      }
+
+      consumptionMap[state.name] = Number(latest.predicted_consumption) || 0;
     });
+
     return consumptionMap;
   };
 
@@ -117,7 +165,10 @@ export function IndiaMapChart({
     return () => window.removeEventListener("resize", updateDimensions);
   }, []);
 
-  const consumptionData = getStateConsumption();
+  const consumptionData = useMemo(
+    () => getStateConsumption(),
+    [stateData, forecastData]
+  );
 
   // Detect dark mode
   const [isDarkMode, setIsDarkMode] = useState(false);

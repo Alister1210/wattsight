@@ -80,6 +80,42 @@ export const getForecastConsumption = async (stateId?: string) => {
 };
 import { supabase } from "@/integrations/supabase/client";
 
+// Fetch future forecast consumption data for the next 7 days
+export interface FutureForecastDataPoint {
+  forecast_date: string;
+  predicted_consumption: number;
+  state_id: string;
+}
+
+export const getFutureForecasts = async (
+  stateId?: string
+): Promise<FutureForecastDataPoint[]> => {
+  try {
+    const today = new Date().toISOString().split("T")[0];
+
+    let query = supabase
+      .from("future_forecasts")
+      .select("forecast_date, predicted_consumption, state_id")
+      .gte("forecast_date", today)
+      .order("forecast_date", { ascending: true });
+
+    if (stateId) {
+      query = query.eq("state_id", stateId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Error fetching future forecasts:", error);
+      throw error;
+    }
+    return data || [];
+  } catch (error) {
+    console.error("Error in getFutureForecasts:", error);
+    throw error;
+  }
+};
+
 // Fetch states data from Supabase
 export const getStates = async () => {
   const { data, error } = await supabase
@@ -243,7 +279,7 @@ export const getRegionalConsumption = async () => {
 };
 
 // Improved getWeatherImpactData function
-export const getWeatherImpactData = async () => {
+export const getWeatherImpactData = async (stateId?: string) => {
   try {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
       .toISOString()
@@ -253,7 +289,7 @@ export const getWeatherImpactData = async () => {
       .split("T")[0];
 
     // Get weather data for the past 30 days
-    const { data: weatherData, error: weatherError } = await supabase
+    let weatherQuery = supabase
       .from("weather_data")
       .select(
         `
@@ -269,10 +305,15 @@ export const getWeatherImpactData = async () => {
       .lte("date", yesterday)
       .order("date", { ascending: true });
 
+    if (stateId) {
+      weatherQuery = weatherQuery.eq("state_id", stateId);
+    }
+
+    const { data: weatherData, error: weatherError } = await weatherQuery;
     if (weatherError) throw weatherError;
 
     // Get consumption data for the same period
-    const { data: consumptionData, error: consumptionError } = await supabase
+    let consumptionQuery = supabase
       .from("forecasts")
       .select(
         `
@@ -283,6 +324,13 @@ export const getWeatherImpactData = async () => {
       )
       .gte("date", thirtyDaysAgo)
       .lte("date", yesterday);
+
+    if (stateId) {
+      consumptionQuery = consumptionQuery.eq("state_id", stateId);
+    }
+
+    const { data: consumptionData, error: consumptionError } =
+      await consumptionQuery;
 
     if (consumptionError) throw consumptionError;
 
