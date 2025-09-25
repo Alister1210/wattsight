@@ -111,7 +111,7 @@ export function ConsumptionChart({
   const today = new Date().toISOString().split("T")[0];
 
   return (
-    <Card className="w-full shadow-sm border-gray-200/60 bg-white/50 backdrop-blur-sm">
+    <Card className="w-full shadow-sm border border-gray-200/60 bg-white/50 backdrop-blur-sm dark:border-gray-700 dark:bg-slate-900">
       <CardHeader className="pb-4">
         <div className="space-y-2">
           <CardTitle className="text-xl font-semibold text-gray-900 leading-tight">
