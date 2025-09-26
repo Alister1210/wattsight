@@ -482,14 +482,14 @@ export const getDashboardStats = async (selectedStateId?: string) => {
       .from("forecasts")
       .select(
         `
-        predicted_consumption,
-        confidence_interval_lower,
-        confidence_interval_upper,
-        state:state_id (
-          id,
-          name
-        )
-      `
+    predicted_consumption,
+    confidence_interval_lower,
+    confidence_interval_upper,
+    state:state_id (
+      id,
+      name
+    )
+  `
       )
       .eq("date", yesterday);
 
@@ -510,14 +510,14 @@ export const getDashboardStats = async (selectedStateId?: string) => {
       .from("forecasts")
       .select(
         `
-        predicted_consumption,
-        confidence_interval_lower,
-        confidence_interval_upper,
-        state:state_id (
-          id,
-          name
-        )
-      `
+    predicted_consumption,
+    confidence_interval_lower,
+    confidence_interval_upper,
+    state:state_id (
+      id,
+      name
+    )
+  `
       )
       .eq("date", today);
 
@@ -535,14 +535,14 @@ export const getDashboardStats = async (selectedStateId?: string) => {
       .from("forecasts")
       .select(
         `
-        predicted_consumption,
-        confidence_interval_lower,
-        confidence_interval_upper,
-        state:state_id (
-          id,
-          name
-        )
-      `
+    predicted_consumption,
+    confidence_interval_lower,
+    confidence_interval_upper,
+    state:state_id (
+      id,
+      name
+    )
+  `
       )
       .eq("date", yesterday);
 
@@ -563,15 +563,15 @@ export const getDashboardStats = async (selectedStateId?: string) => {
       .from("forecasts")
       .select(
         `
-        predicted_consumption,
-        confidence_interval_lower,
-        confidence_interval_upper,
-        date,
-        state:state_id (
-          id,
-          name
-        )
-      `
+    predicted_consumption,
+    confidence_interval_lower,
+    confidence_interval_upper,
+    date,
+    state:state_id (
+      id,
+      name
+    )
+  `
       )
       .gte("date", twoWeeksAgo)
       .lte("date", yesterday)
@@ -585,21 +585,19 @@ export const getDashboardStats = async (selectedStateId?: string) => {
 
     if (weeklyError) throw weeklyError;
 
-    // Get model accuracy
-    let modelQuery = supabase
-      .from("model_metrics")
-      .select("accuracy_percentage, model_name, state:state_id(id, name)")
-      .order("training_date", { ascending: false });
+    // Get today's confidence percentage from forecasts table
+    let accuracyQuery = supabase
+      .from("forecasts")
+      .select("confidence_percentage")
+      .eq("date", today)
+      .limit(1)
+      .single();
 
     if (selectedStateId) {
-      modelQuery = modelQuery.eq("state_id", selectedStateId);
+      accuracyQuery = accuracyQuery.eq("state_id", selectedStateId);
     }
 
-    const { data: modelMetrics, error: metricsError } = await modelQuery.limit(
-      10
-    );
-
-    if (metricsError) throw metricsError;
+    const { data: todayAccuracy, error: accuracyError } = await accuracyQuery;
 
     // Calculate totals
     const totalConsumption =
@@ -656,16 +654,8 @@ export const getDashboardStats = async (selectedStateId?: string) => {
           100
         : 0;
 
-    // Get average model accuracy
-    let avgAccuracy = 95.0; // Default value
-
-    if (modelMetrics && modelMetrics.length > 0) {
-      const accuracySum = modelMetrics.reduce(
-        (sum, metric) => sum + (metric.accuracy_percentage || 0),
-        0
-      );
-      avgAccuracy = accuracySum / modelMetrics.length;
-    }
+    // Use today's confidence percentage or default value
+    const accuracy = todayAccuracy?.confidence_percentage || 95.0;
 
     // Get total number of states in the system
     const { count: statesCount, error: countError } = await supabase
@@ -679,7 +669,7 @@ export const getDashboardStats = async (selectedStateId?: string) => {
       totalForecast: Math.round(todayForecastTotal),
       yesterdayForecast: Math.round(yesterdayForecastTotal),
       weekOverWeekChange: Math.round(weekOverWeekChange * 10) / 10,
-      forecasterAccuracy: Math.round(avgAccuracy * 10) / 10,
+      forecasterAccuracy: Math.round(accuracy * 10) / 10,
       states: statesCount || 0,
     };
   } catch (error) {
